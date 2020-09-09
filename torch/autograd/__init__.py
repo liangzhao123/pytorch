@@ -19,6 +19,11 @@ from .anomaly_mode import detect_anomaly, set_detect_anomaly
 from . import profiler
 from . import functional
 
+# mypy annotations
+def _profiler_enabled() -> bool: ...
+def _RecordFunction() -> Callable[..., Any]: ...
+def _run_before_callbacks(Callable, str): ...
+
 __all__ = ['Variable', 'Function', 'backward', 'grad_mode']
 
 
