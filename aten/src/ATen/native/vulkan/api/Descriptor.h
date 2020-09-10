@@ -49,7 +49,7 @@ namespace api {
 // as well.  This behavior is by design.
 //
 
-struct C10_EXPORT Descriptor final {
+struct Descriptor final {
   //
   // Pool
   //
@@ -63,8 +63,6 @@ struct C10_EXPORT Descriptor final {
       uint32_t capacity;
       c10::SmallVector<VkDescriptorPoolSize, 16u> sizes;
     };
-
-    static const Descriptor kDefault;
 
     /*
       Factory
@@ -83,6 +81,7 @@ struct C10_EXPORT Descriptor final {
       };
 
       Handle operator()(const Descriptor& descriptor) const;
+      void purge(VkDescriptorPool descriptor_pool);
 
      private:
       VkDevice device_;
@@ -95,32 +94,34 @@ struct C10_EXPORT Descriptor final {
     typedef api::Cache<Factory> Cache;
     Cache cache;
 
-    explicit Pool(const VkDevice device)
-      : cache(Factory(device)) {
-    }
+    // This field simply stores a reference to the primary descriptor pool in
+    // the cache for ease of access, and carries no significance otherwise.
+    // This object's lifetime is managed by the cache as usual.  Purge the
+    // contents of the pool regularly through the factory it was created.
 
-    static void purge(VkDevice device, VkDescriptorPool descriptor_pool);
+    VkDescriptorPool primary;
+
+    explicit Pool(VkDevice device);
   } pool;
 
   /*
-    Factory
+    Set
   */
 
-  class Factory final {
+  class Set final {
    public:
-    Factory(VkDevice device, VkDescriptorPool descriptor_pool);
+    Set(VkDevice device, VkDescriptorPool descriptor_pool);
 
     VkDescriptorSet allocate(VkDescriptorSetLayout descriptor_set_layout);
-    void purge();
 
    private:
     VkDevice device_;
     VkDescriptorPool descriptor_pool_;
-  } factory;
+  } set;
 
   explicit Descriptor(const VkDevice device)
     : pool(device),
-      factory(device, pool.cache.retrieve(Pool::kDefault)) {
+      set(device, pool.primary) {
   }
 };
 

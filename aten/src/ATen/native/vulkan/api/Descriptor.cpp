@@ -4,8 +4,9 @@ namespace at {
 namespace native {
 namespace vulkan {
 namespace api {
+namespace {
 
-const Descriptor::Pool::Descriptor Descriptor::Pool::kDefault{
+const Descriptor::Pool::Descriptor kPrimary{
   1024u,
   {
     // Note: It is OK for the sum of descriptors per type, below, to exceed
@@ -44,12 +45,20 @@ const Descriptor::Pool::Descriptor Descriptor::Pool::kDefault{
   },
 };
 
+} // namespace
+
+Descriptor::Pool::Pool(const VkDevice device)
+  : cache(Factory(device)),
+    primary(cache.retrieve(kPrimary)) {
+}
+
 Descriptor::Pool::Factory::Factory(const VkDevice device)
   : device_(device) {
+    TORCH_INTERNAL_ASSERT(device_, "Invalid Vulkan device!");
 }
 
 typename Descriptor::Pool::Factory::Handle Descriptor::Pool::Factory::operator()(
-  const Descriptor& descriptor) const {
+    const Descriptor& descriptor) const {
   const VkDescriptorPoolCreateInfo descriptor_pool_create_info{
     VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
     nullptr,
@@ -69,19 +78,28 @@ typename Descriptor::Pool::Factory::Handle Descriptor::Pool::Factory::operator()
   };
 }
 
-void Descriptor::Pool::purge(
-    const VkDevice device,
+void Descriptor::Pool::Factory::purge(
     const VkDescriptorPool descriptor_pool) {
-  VK_CHECK(vkResetDescriptorPool(device, descriptor_pool, 0u));
+  TORCH_INTERNAL_ASSERT(descriptor_pool, "Invalid Vulkan descriptor pool!");
+
+  VK_CHECK(vkResetDescriptorPool(device_, descriptor_pool, 0u));
 }
 
-Descriptor::Factory::Factory(const VkDevice device, const VkDescriptorPool descriptor_pool)
+Descriptor::Set::Set(
+    const VkDevice device,
+    const VkDescriptorPool descriptor_pool)
   : device_(device),
     descriptor_pool_(descriptor_pool) {
+  TORCH_INTERNAL_ASSERT(device_, "Invalid Vulkan device!");
+  TORCH_INTERNAL_ASSERT(descriptor_pool_, "Invalid Vulkan descriptor pool!");
 }
 
-VkDescriptorSet Descriptor::Factory::allocate(
+VkDescriptorSet Descriptor::Set::allocate(
     const VkDescriptorSetLayout descriptor_set_layout) {
+  TORCH_INTERNAL_ASSERT(
+      descriptor_set_layout,
+      "Invalid Vulkan descriptor set layout!");
+
   const VkDescriptorSetAllocateInfo descriptor_set_allocate_info{
     VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
     nullptr,
@@ -95,10 +113,6 @@ VkDescriptorSet Descriptor::Factory::allocate(
       device_, &descriptor_set_allocate_info, &descriptor_set));
 
   return descriptor_set;
-}
-
-void Descriptor::Factory::purge() {
-  Pool::purge(device_, descriptor_pool_);
 }
 
 } // namespace api

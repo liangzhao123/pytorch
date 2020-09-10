@@ -10,6 +10,10 @@ VmaAllocator create_allocator(
     const VkInstance instance,
     const VkPhysicalDevice physical_device,
     const VkDevice device) {
+  TORCH_INTERNAL_ASSERT(instance, "Invalid Vulkan instance!");
+  TORCH_INTERNAL_ASSERT(physical_device, "Invalid Vulkan physical device!");
+  TORCH_INTERNAL_ASSERT(device, "Invalid Vulkan device!");
+
   const VmaAllocatorCreateInfo allocator_create_info{
     0u,
     physical_device,
@@ -109,7 +113,12 @@ Resource::Pool::Pool(
     const VkPhysicalDevice physical_device,
     const VkDevice device)
   : device_(device),
-    allocator_(create_allocator(instance, physical_device, device), vmaDestroyAllocator) {
+    allocator_(
+        create_allocator(
+          instance,
+          physical_device,
+          device),
+        vmaDestroyAllocator) {
     buffers_.reserve(Configuration::kReserve);
     images_.reserve(Configuration::kReserve);
 }
