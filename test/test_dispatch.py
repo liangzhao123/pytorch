@@ -23,6 +23,15 @@ import unittest
 
 Result = namedtuple('Result', 'state table provenance')
 
+def extract_entries(table, dispatch_keys):
+    extracted = ''
+    table_entries = table.split('\n')
+    for k in dispatch_keys:
+        for t in table_entries:
+            if t.startswith(k):
+                extracted += (t + '\n')
+    return extracted
+
 class TestDispatch(TestCase):
     namespace_index = 0
 
@@ -315,15 +324,6 @@ Autograd[alias]: impl_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
 catchall: default_def_name_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
 ''')
 
-        def extract_entries(table, dispatch_keys):
-            extracted = ''
-            table_entries = table.split('\n')
-            for k in dispatch_keys:
-                for t in table_entries:
-                    if t.startswith(k):
-                        extracted += (t + '\n')
-            return extracted
-
         # computed dispatch table is too big, so we only check on a few entries we're interested in.
         extracted_table = extract_entries(
             table,
@@ -335,6 +335,73 @@ CUDA: default_def_name_t_t [catch all]
 XLA: impl_t_t [kernel]
 AutogradOther: impl_t_t [autograd kernel]
 AutogradCPU: impl_t_t [kernel]
+AutogradCUDA: impl_t_t [autograd kernel]
+AutogradXLA: impl_t_t [autograd kernel]
+''')
+
+    def test_computed_table_with_cpu_catchall(self):
+        result = self.commute("foo", [
+            # m.def("foo", [](const Tensor & x) { return x })
+            lambda m: m.def_name_t_t("foo"),
+            # m.impl("foo", torch::kCPU, [](const Tensor & x) { return x })
+            lambda m: m.impl_t_t("foo", "cpu"),
+        ])
+        state, table = result.state, result.table
+        self.assertExpectedInline(state, '''\
+name: test::foo
+schema: test::foo(Tensor _0) -> (Tensor _0)
+debug: registered at /dev/null:0
+alias analysis kind: CONSERVATIVE
+CPU: impl_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
+catchall: default_def_name_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
+''')
+
+        # computed dispatch table is too big, so we only check on a few entries we're interested in.
+        extracted_table = extract_entries(
+            table,
+            ('CPU', 'CUDA', 'XLA', 'AutogradOther', 'AutogradCPU', 'AutogradCUDA', 'AutogradXLA'))
+
+        self.assertExpectedInline(extracted_table, '''\
+CPU: impl_t_t [kernel]
+CUDA: default_def_name_t_t [catch all]
+XLA: default_def_name_t_t [catch all]
+AutogradOther: default_def_name_t_t [autograd catch all]
+AutogradCPU: fallthrough registered at ../aten/src/ATen/core/VariableFallbackKernel.cpp:39 [backend fallback]
+AutogradCUDA: default_def_name_t_t [autograd catch all]
+AutogradXLA: default_def_name_t_t [autograd catch all]
+''')
+
+    def test_computed_table_with_cpu_autograd_catchall(self):
+        result = self.commute("foo", [
+            # m.def("foo", [](const Tensor & x) { return x })
+            lambda m: m.def_name_t_t("foo"),
+            # m.impl("foo", torch::kCPU, [](const Tensor & x) { return x })
+            lambda m: m.impl_t_t("foo", "cpu"),
+            # m.impl("foo", torch::kAutograd, [](const Tensor & x) { return x })
+            lambda m: m.impl_t_t("foo", "autograd"),
+        ])
+        state, table = result.state, result.table
+        self.assertExpectedInline(state, '''\
+name: test::foo
+schema: test::foo(Tensor _0) -> (Tensor _0)
+debug: registered at /dev/null:0
+alias analysis kind: CONSERVATIVE
+CPU: impl_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
+Autograd[alias]: impl_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
+catchall: default_def_name_t_t :: (Tensor _0) -> (Tensor _0) [ boxed unboxed ]
+''')
+
+        # computed dispatch table is too big, so we only check on a few entries we're interested in.
+        extracted_table = extract_entries(
+            table,
+            ('CPU', 'CUDA', 'XLA', 'AutogradOther', 'AutogradCPU', 'AutogradCUDA', 'AutogradXLA'))
+
+        self.assertExpectedInline(extracted_table, '''\
+CPU: impl_t_t [kernel]
+CUDA: default_def_name_t_t [catch all]
+XLA: default_def_name_t_t [catch all]
+AutogradOther: impl_t_t [autograd kernel]
+AutogradCPU: impl_t_t [autograd kernel]
 AutogradCUDA: impl_t_t [autograd kernel]
 AutogradXLA: impl_t_t [autograd kernel]
 ''')
