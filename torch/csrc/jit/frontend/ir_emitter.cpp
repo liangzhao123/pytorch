@@ -2708,7 +2708,8 @@ struct to_ir {
         return std::make_shared<SimpleValue>(expr);
       }
       case prim::rpc_async:
-      case prim::rpc_sync: {
+      case prim::rpc_sync:
+      case prim::rpc_remote: {
         return emitRpcExpr(apply, form);
       }
       case prim::unchecked_cast: {
@@ -3096,10 +3097,15 @@ struct to_ir {
     // Set output type from FunctionSchema and corresponding rpc_op.
     const std::vector<Argument>& returns = functionSchema.returns();
     TORCH_INTERNAL_ASSERT(returns.size() == 1);
-    auto output_type = returns[0].type();
+    TypePtr output_type = nullptr;
     if (rpc_op == prim::rpc_async) {
-      rpc_node_output->setType(FutureType::create(output_type));
+      output_type = FutureType::create(returns[0].type());
+    } else if (rpc_op == prim::rpc_remote) {
+      output_type = RRefType::create(returns[0].type());
+    } else {
+      output_type = returns[0].type();
     }
+    rpc_node_output->setType(output_type);
 
     return std::make_shared<SimpleValue>(rpc_node_output);
   }
